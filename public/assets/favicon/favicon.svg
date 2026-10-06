@@ -1,0 +1,12 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="favGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A78BFA" />
+      <stop offset="100%" stop-color="#6D28D9" />
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="12" fill="#0A0A0F"/>
+  <!-- Central Motion Spark -->
+  <path d="M24 6 C24 16, 34 24, 42 24 C34 24, 24 32, 24 42 C24 32, 14 24, 6 24 C14 24, 24 16, 24 6 Z" fill="url(#favGrad)"/>
+  <circle cx="24" cy="24" r="4" fill="#FFFFFF"/>
+</svg>
