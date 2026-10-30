@@ -1,0 +1,149 @@
+Class(function MatrixWasm() {
+  const _this = this;
+  let registry,
+    _oom = !1;
+  window.FinalizationRegistry &&
+    (registry = new FinalizationRegistry((heldValue) => {
+      (wasmExports.free_matrix(heldValue.ptr), (_oom = !1));
+    }));
+  let _memory,
+    wasmExports,
+    _matrices = new Set(),
+    _loggedOutOfMemory = !1;
+  let promise = Promise.create();
+  (async function loadWasm() {
+    try {
+      return await (async function doLoadWasm(bytes) {
+        const module = await WebAssembly.compile(bytes);
+        let initial = 4;
+        "firefox" === Device.system.browser && (initial = 64);
+        function emscripten_resize_heap(newSize) {
+          const pageSize = 65536,
+            currentPages = _memory.buffer.byteLength / pageSize,
+            requiredPages = Math.ceil(newSize / pageSize);
+          if (!(requiredPages > currentPages)) return !1;
+          {
+            const pagesToGrow = requiredPages - currentPages;
+            try {
+              return (
+                _memory.grow(pagesToGrow),
+                (_oom = !1),
+                _matrices.forEach((weakRef) => {
+                  let ref = weakRef.deref();
+                  if (ref) {
+                    const ptr = ref.elements.ptr,
+                      elements = new Float32Array(_memory.buffer, ptr, 16);
+                    ((elements.ptr = ptr),
+                      (ref.elements = elements),
+                      registry?.unregister(ref),
+                      registry?.register(ref, ref.elements, ref));
+                  } else _matrices.delete(weakRef);
+                }),
+                !0
+              );
+            } catch (error) {
+              return (
+                (_oom = !0),
+                _loggedOutOfMemory ||
+                  ((_loggedOutOfMemory = !0),
+                  console.error("MatrixWasm failed to resize heap", error)),
+                !1
+              );
+            }
+          }
+        }
+        _memory = new WebAssembly.Memory({ initial: initial, maximum: 64 });
+        const moduleImports = {
+            env: { memory: _memory, emscripten_resize_heap: emscripten_resize_heap },
+          },
+          instance = await WebAssembly.instantiate(module, moduleImports);
+        return (instance.exports.__wasm_call_ctors(), instance.exports);
+      })(
+        (function decodeBase64(base64) {
+          const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+            lookup = new Uint8Array(256);
+          for (let i = 0; i < 64; i++) lookup[chars.charCodeAt(i)] = i;
+          let i,
+            encoded1,
+            encoded2,
+            encoded3,
+            encoded4,
+            bufferLength = 0.75 * base64.length,
+            len = base64.length,
+            p = 0;
+          "=" === base64[base64.length - 1] &&
+            (bufferLength--, "=" === base64[base64.length - 2] && bufferLength--);
+          const arraybuffer = new ArrayBuffer(bufferLength),
+            bytes = new Uint8Array(arraybuffer);
+          for (i = 0; i < len; i += 4)
+            ((encoded1 = lookup[base64.charCodeAt(i)]),
+              (encoded2 = lookup[base64.charCodeAt(i + 1)]),
+              (encoded3 = lookup[base64.charCodeAt(i + 2)]),
+              (encoded4 = lookup[base64.charCodeAt(i + 3)]),
+              (bytes[p++] = (encoded1 << 2) | (encoded2 >> 4)),
+              (bytes[p++] = ((15 & encoded2) << 4) | (encoded3 >> 2)),
+              (bytes[p++] = ((3 & encoded3) << 6) | (63 & encoded4)));
+          return arraybuffer;
+        })(
+          "AGFzbQEAAAABHAZgAX8Bf2AAAX9gAX8AYAAAYAN/f38AYAJ/fwACLwIDZW52FmVtc2NyaXB0ZW5fcmVzaXplX2hlYXAAAANlbnYGbWVtb3J5AgEEgIACAwoJAwECBAUAAQIABAUBcAEBAQYHAX8BQYAUCweaAQkRX193YXNtX2NhbGxfY3RvcnMAAQ9hbGxvY2F0ZV9tYXRyaXgAAgtmcmVlX21hdHJpeAADEW11bHRpcGx5X21hdHJpY2VzAAQKZ2V0SW52ZXJzZQAFGV9faW5kaXJlY3RfZnVuY3Rpb25fdGFibGUBAAlzdGFja1NhdmUABwxzdGFja1Jlc3RvcmUACApzdGFja0FsbG9jAAkKqzYJAgAL8B4BC38jAEEQayIKJAACQEGICCgCACIFQQl2IgBBA3EEQAJAIABBf3NBAXFBCWoiCEEDdCIBQbAIaiIAIAFBuAhqKAIAIgEoAggiAkYEQEGICCAFQX4gCHdxNgIADAELIAIgADYCDCAAIAI2AggLIAFBCGohACABIAhBA3QiCEEDcjYCBCABIAhqIgEgASgCBEEBcjYCBAwBCwJAAkACQAJAAkACQAJAQZAIKAIAIgZByABPDQAgAARAAkAgAEEJdEGAeHFoIgFBA3QiAEGwCGoiAiAAQbgIaigCACIAKAIIIgNGBEBBiAggBUF+IAF3cSIFNgIADAELIAMgAjYCDCACIAM2AggLIABBywA2AgQgAEHIAGoiAyABQQN0IgFByABrIghBAXI2AgQgACABaiAINgIAIAYEQCAGQXhxQbAIaiECQZwIKAIAIQECfyAFQQEgBkEDdnQiBHFFBEBBiAggBCAFcjYCACACDAELIAIoAggLIQQgAiABNgIIIAQgATYCDCABIAI2AgwgASAENgIICyAAQQhqIQBBnAggAzYCAEGQCCAINgIADAgLQYwIKAIAIglFDQAgCWhBAnRBuApqKAIAIgMoAgRBeHFByABrIQEgAyECA0ACQCACKAIQIgBFBEAgAigCFCIARQ0BCyAAKAIEQXhxQcgAayICIAEgASACSyICGyEBIAAgAyACGyEDIAAhAgwBCwsgAygCGCEHIAMgAygCDCIARwRAQZgIKAIAGiADKAIIIgIgADYCDCAAIAI2AggMBwsgAygCFCICBH8gA0EUagUgAygCECICRQ0CIANBEGoLIQQDQCAEIQggAiIAQRRqIQQgACgCFCICDQAgAEEQaiEEIAAoAhAiAg0ACyAIQQA2AgAMBgtBkAgoAgAiAEHIAE8EQEGcCCgCACEBAkAgAEHIAGsiAkEQTwRAIAFByABqIgMgAkEBcjYCBCAAIAFqIAI2AgAgAUHLADYCBAwBCyABIABBA3I2AgQgACABaiIAIAAoAgRBAXI2AgRBACECC0GQCCACNgIAQZwIIAM2AgAgAUEIaiEADAcLQZQIKAIAIgNByABLBEBBlAggA0HIAGsiATYCAEGgCEGgCCgCACIAQcgAaiICNgIAIAIgAUEBcjYCBCAAQcsANgIEIABBCGohAAwHC0EAIQACf0HgCygCAARAQegLKAIADAELQewLQn83AgBB5AtCgKCAgICABDcCAEHgCyAKQQxqQXBxQdiq1aoFczYCAEH0C0EANgIAQcQLQQA2AgBBgCALIgFB9wBqIgVBACABayIIcSIEQcgATQ0GQcALKAIAIgEEQEG4CygCACICIARqIgcgAk0NByABIAdJDQcLAkBBxAstAABBBHFFBEACQAJAAkACQEGgCCgCACIBBEBByAshAANAIAEgACgCACICTwRAIAIgACgCBGogAUsNAwsgACgCCCIADQALC0EAEAYiA0F/Rg0DIAQhBUHkCygCACIAQQFrIgEgA3EEQCAEIANrIAEgA2pBACAAa3FqIQULIAVByABNDQNBwAsoAgAiAARAQbgLKAIAIgEgBWoiAiABTQ0EIAAgAkkNBAsgBRAGIgAgA0cNAQwFCyAFIANrIAhxIgUQBiIDIAAoAgAgACgCBGpGDQEgAyEACyAAQX9GDQEgBUH4AE8EQCAAIQMMBAtB6AsoAgAiAUH3ACAFa2pBACABa3EiARAGQX9GDQEgASAFaiEFIAAhAwwDCyADQX9HDQILQcQLQcQLKAIAQQRyNgIACyAEEAYhA0EAEAYhACADQX9GDQQgAEF/Rg0EIAAgA00NBCAAIANrIgVB8ABNDQQLQbgLQbgLKAIAIAVqIgA2AgBBvAsoAgAgAEkEQEG8CyAANgIACwJAQaAIKAIAIgEEQEHICyEAA0AgAyAAKAIAIgIgACgCBCIEakYNAiAAKAIIIgANAAsMAwtBmAgoAgAiAEEAIAAgA00bRQRAQZgIIAM2AgALQQAhAEHMCyAFNgIAQcgLIAM2AgBBqAhBfzYCAEGsCEHgCygCADYCAEHUC0EANgIAA0AgAEEDdCIBQbgIaiABQbAIaiICNgIAIAFBvAhqIAI2AgAgAEEBaiIAQSBHDQALQZQIIAVBKGsiAEF4IANrQQdxIgFrIgI2AgBBoAggASADaiIBNgIAIAEgAkEBcjYCBCAAIANqQSg2AgRBpAhB8AsoAgA2AgAMAwsgASADTw0BIAEgAkkNASAAKAIMQQhxDQEgACAEIAVqNgIEQaAIIAFBeCABa0EHcSIAaiICNgIAQZQIQZQIKAIAIAVqIgMgAGsiADYCACACIABBAXI2AgQgASADakEoNgIEQaQIQfALKAIANgIADAILQQAhAAwEC0GYCCgCACADSwRAQZgIIAM2AgALIAMgBWohAkHICyEAAkADQCACIAAoAgBHBEAgACgCCCIADQEMAgsLIAAtAAxBCHFFDQMLQcgLIQADQAJAIAEgACgCACICTwRAIAIgACgCBGoiAiABSw0BCyAAKAIIIQAMAQsLQZQIIAVBKGsiAEF4IANrQQdxIgRrIgg2AgBBoAggAyAEaiIENgIAIAQgCEEBcjYCBCAAIANqQSg2AgRBpAhB8AsoAgA2AgAgASACQScgAmtBB3FqQS9rIgAgACABQRBqSRsiBEEbNgIEIARB0AspAgA3AhAgBEHICykCADcCCEHQCyAEQQhqNgIAQcwLIAU2AgBByAsgAzYCAEHUC0EANgIAIARBGGohAANAIABBBzYCBCAAQQhqIQMgAEEEaiEAIAIgA0sNAAsgASAERg0AIAQgBCgCBEF+cTYCBCABIAQgAWsiA0EBcjYCBCAEIAM2AgACfyADQf8BTQRAIANBeHFBsAhqIQACf0GICCgCACICQQEgA0EDdnQiA3FFBEBBiAggAiADcjYCACAADAELIAAoAggLIQIgACABNgIIIAIgATYCDEEMIQNBCAwBC0EfIQAgA0H///8HTQRAIANBJiADQQh2ZyIAa3ZBAXEgAEEBdGtBPmohAAsgASAANgIcIAFCADcCECAAQQJ0QbgKaiECAkACQEGMCCgCACIEQQEgAHQiBXFFBEBBjAggBCAFcjYCACACIAE2AgAgASACNgIYDAELIANBGSAAQQF2a0EAIABBH0cbdCEAIAIoAgAhBANAIAQiAigCBEF4cSADRg0CIABBHXYhBCAAQQF0IQAgAiAEQQRxakEQaiIFKAIAIgQNAAsgBSABNgIAIAEgAjYCGAtBCCEDIAEhAiABIQBBDAwBCyACKAIIIgAgATYCDCACIAE2AgggASAANgIIQQAhAEEYIQNBDAsgAWogAjYCACABIANqIAA2AgALQZQIKAIAIgBByABNDQBBlAggAEHIAGsiATYCAEGgCEGgCCgCACIAQcgAaiICNgIAIAIgAUEBcjYCBCAAQcsANgIEIABBCGohAAwDC0GECEEwNgIAQQAhAAwCCyAAIAM2AgAgACAAKAIEIAVqNgIEIANBeCADa0EHcWoiCEHLADYCBCACQXggAmtBB3FqIgcgCEHIAGoiBmshBAJAQaAIKAIAIAdGBEBBoAggBjYCAEGUCEGUCCgCACAEaiIBNgIAIAYgAUEBcjYCBAwBC0GcCCgCACAHRgRAQZwIIAY2AgBBkAhBkAgoAgAgBGoiATYCACAGIAFBAXI2AgQgASAGaiABNgIADAELIAcoAgQiAkEDcUEBRgRAIAJBeHEhBSAHKAIMIQECQCACQf8BTQRAIAJBA3YhAyAHKAIIIgAgAUYEQEGICEGICCgCAEF+IAN3cTYCAAwCCyAAIAE2AgwgASAANgIIDAELIAcoAhghCQJAIAEgB0cEQEGYCCgCABogBygCCCICIAE2AgwgASACNgIIDAELAkAgBygCFCICBH8gB0EUagUgBygCECICRQ0BIAdBEGoLIQADQCAAIQMgAiIBQRRqIQAgASgCFCICDQAgAUEQaiEAIAEoAhAiAg0ACyADQQA2AgAMAQtBACEBCyAJRQ0AAkAgBygCHCIAQQJ0QbgKaiICKAIAIAdGBEAgAiABNgIAIAENAUGMCEGMCCgCAEF+IAB3cTYCAAwCCyAJQRBBFCAJKAIQIAdGG2ogATYCACABRQ0BCyABIAk2AhggBygCECICBEAgASACNgIQIAIgATYCGAsgBygCFCICRQ0AIAEgAjYCFCACIAE2AhgLIAQgBWohBCAFIAdqIgcoAgQhAgsgByACQX5xNgIEIAYgBEEBcjYCBCAEIAZqIAQ2AgAgBEH/AU0EQCAEQXhxQbAIaiEBAn9BiAgoAgAiAkEBIARBA3Z0IgRxRQRAQYgIIAIgBHI2AgAgAQwBCyABKAIICyEEIAEgBjYCCCAEIAY2AgwgBiABNgIMIAYgBDYCCAwBC0EfIQEgBEH///8HTQRAIARBJiAEQQh2ZyIBa3ZBAXEgAUEBdGtBPmohAQsgBiABNgIcIAZCADcCECABQQJ0QbgKaiECAkACQEGMCCgCACIAQQEgAXQiB3FFBEBBjAggACAHcjYCACACIAY2AgAgBiACNgIYDAELIARBGSABQQF2a0EAIAFBH0cbdCEBIAIoAgAhAANAIAAiAigCBEF4cSAERg0CIAFBHXYhACABQQF0IQEgAiAAQQRxakEQaiIHKAIAIgANAAsgByAGNgIAIAYgAjYCGAsgBiAGNgIMIAYgBjYCCAwBCyACKAIIIgEgBjYCDCACIAY2AgggBkEANgIYIAYgAjYCDCAGIAE2AggLIAhBCGohAAwBCwJAIAdFDQACQCADKAIcIgRBAnRBuApqIgIoAgAgA0YEQCACIAA2AgAgAA0BQYwIIAlBfiAEd3E2AgAMAgsgB0EQQRQgBygCECADRhtqIAA2AgAgAEUNAQsgACAHNgIYIAMoAhAiAgRAIAAgAjYCECACIAA2AhgLIAMoAhQiAkUNACAAIAI2AhQgAiAANgIYCwJAIAFBD00EQCADIAFByABqIgBBA3I2AgQgACADaiIAIAAoAgRBAXI2AgQMAQsgA0HLADYCBCADQcgAaiIIIAFBAXI2AgQgASAIaiABNgIAIAYEQCAGQXhxQbAIaiECQZwIKAIAIQACf0EBIAZBA3Z0IgQgBXFFBEBBiAggBCAFcjYCACACDAELIAIoAggLIQQgAiAANgIIIAQgADYCDCAAIAI2AgwgACAENgIIC0GcCCAINgIAQZAIIAE2AgALIANBCGohAAsgCkEQaiQAIAAL5AsBB38CQCAAIgNFDQAgA0EIayICIANBBGsoAgAiAUF4cSIDaiEEAkAgAUEBcQ0AIAFBAnFFDQEgAiACKAIAIgBrIgJBmAgoAgBJDQEgACADaiEDAkACQEGcCCgCACACRwRAIAIoAgwhASAAQf8BTQRAIABBA3YhByACKAIIIgUgAUYEQEGICEGICCgCAEF+IAd3cTYCAAwFCyAFIAE2AgwgASAFNgIIDAQLIAIoAhghBiABIAJHBEAgAigCCCIAIAE2AgwgASAANgIIDAMLIAIoAhQiAAR/IAJBFGoFIAIoAhAiAEUNAiACQRBqCyEFA0AgBSEHIAAiAUEUaiEFIAEoAhQiAA0AIAFBEGohBSABKAIQIgANAAsgB0EANgIADAILIAQoAgQiAUEDcUEDRw0CQZAIIAM2AgAgBCABQX5xNgIEIAIgA0EBcjYCBCAEIAM2AgAMAwtBACEBCyAGRQ0AAkAgAigCHCIFQQJ0QbgKaiIAKAIAIAJGBEAgACABNgIAIAENAUGMCEGMCCgCAEF+IAV3cTYCAAwCCyAGQRBBFCAGKAIQIAJGG2ogATYCACABRQ0BCyABIAY2AhggAigCECIABEAgASAANgIQIAAgATYCGAsgAigCFCIARQ0AIAEgADYCFCAAIAE2AhgLIAIgBE8NACAEKAIEIgBBAXFFDQACQAJAAkACQCAAQQJxRQRAQaAIKAIAIARGBEBBoAggAjYCAEGUCEGUCCgCACADaiIDNgIAIAIgA0EBcjYCBCACQZwIKAIARw0GQZAIQQA2AgBBnAhBADYCAAwGC0GcCCgCACAERgRAQZwIIAI2AgBBkAhBkAgoAgAgA2oiAzYCACACIANBAXI2AgQgAiADaiADNgIADAYLIABBeHEgA2ohAyAEKAIMIQEgAEH/AU0EQCAEKAIIIQUgAEEDdiEEIAEgBUYEQEGICEGICCgCAEF+IAR3cTYCAAwFCyAFIAE2AgwgASAFNgIIDAQLIAQoAhghBiABIARHBEBBmAgoAgAaIAQoAggiACABNgIMIAEgADYCCAwDCyAEKAIUIgAEfyAEQRRqBSAEKAIQIgBFDQIgBEEQagshBQNAIAUhByAAIgFBFGohBSABKAIUIgANACABQRBqIQUgASgCECIADQALIAdBADYCAAwCCyAEIABBfnE2AgQgAiADQQFyNgIEIAIgA2ogAzYCAAwDC0EAIQELIAZFDQACQCAEKAIcIgVBAnRBuApqIgAoAgAgBEYEQCAAIAE2AgAgAQ0BQYwIQYwIKAIAQX4gBXdxNgIADAILIAZBEEEUIAYoAhAgBEYbaiABNgIAIAFFDQELIAEgBjYCGCAEKAIQIgAEQCABIAA2AhAgACABNgIYCyAEKAIUIgBFDQAgASAANgIUIAAgATYCGAsgAiADQQFyNgIEIAIgA2ogAzYCACACQZwIKAIARw0AQZAIIAM2AgAMAQsgA0H/AU0EQCADQXhxQbAIaiEBAn9BiAgoAgAiAEEBIANBA3Z0IgNxRQRAQYgIIAAgA3I2AgAgAQwBCyABKAIICyEDIAEgAjYCCCADIAI2AgwgAiABNgIMIAIgAzYCCAwBC0EfIQEgA0H///8HTQRAIANBJiADQQh2ZyIBa3ZBAXEgAUEBdGtBPmohAQsgAiABNgIcIAJCADcCECABQQJ0QbgKaiEEAn8CQAJ/QYwIKAIAIgBBASABdCIFcUUEQEGMCCAAIAVyNgIAQRghASAEIQVBCAwBCyADQRkgAUEBdmtBACABQR9HG3QhASAEKAIAIQUDQCAFIgAoAgRBeHEgA0YNAiABQR12IQUgAUEBdCEBIAAgBUEEcWpBEGoiBCgCACIFDQALQRghASAAIQVBCAshAyACIQAgAgwBCyAAKAIIIgUgAjYCDEEIIQEgAEEIaiEEQRghA0EACyEHIAQgAjYCACABIAJqIAU2AgAgAiAANgIMIAIgA2ogBzYCAEGoCEGoCCgCAEEBayICQX8gAhs2AgALC4gCAQR7IAIgAf0JAgwgAP0AAjAiA/3mASAB/QkCCCAA/QACICIE/eYBIAH9CQIAIAD9AAIAIgX95gEgAP0AAhAiBiAB/QkCBP3mAf3kAf3kAf3kAf0LAgAgAiADIAH9CQIc/eYBIAQgAf0JAhj95gEgBSAB/QkCEP3mASAGIAH9CQIU/eYB/eQB/eQB/eQB/QsCECACIAMgAf0JAiz95gEgBCAB/QkCKP3mASAFIAH9CQIg/eYBIAYgAf0JAiT95gH95AH95AH95AH9CwIgIAIgAyAB/QkCPP3mASAEIAH9CQI4/eYBIAUgAf0JAjD95gEgBiAB/QkCNP3mAf3kAf3kAf3kAf0LAjAL1ggCKX0BeyABKgIMIgIgASoCFCINIAEqAiAiC5QiESABKgI4IgiUIAEqAhAiDCABKgI0IhKUIhMgASoCKCIJlCABKgIkIhQgASoCMCIOlCIZIAEqAhgiB5QgByALIBKUIhqUkyANIA6UIhsgCZSTkpIgDCAUlCIcIAiUkyIVlCABKgIIIgogHCABKgI8IgOUIBsgASoCLCIElCAaIAEqAhwiBZQgBSAZlJOSIBMgBJSTIBEgA5STkiIWlCABKgIAIg8gDSAJlCIfIAOUIAcgEpQiICAElCAUIAiUIiEgBZQgBSAJIBKUIiKUk5IgDSAIlCIjIASUkyAHIBSUIiQgA5STkiIXlCABKgIEIhAgByALlCIlIAOUIAwgCJQiJiAElCAJIA6UIicgBZQgBSALIAiUIiiUkyAHIA6UIikgBJSTkpIgDCAJlCIqIAOUkyIYlJKSkiIGQwAAAABbBEAgAEGAgID8AzYCKCAAQYCAgPwDNgI8IAD9DAAAAAAAAAAAAAAAAAAAgD/9CwIIIABBgICA/AM2AgAgAP0MAAAAAAAAAAAAAAAAAAAAAP0LAhggACAr/QsCLCAAQwAAAAA4AgQPCyAAIBVDAACAPyAGlSIGlDgCMCAAIBYgBpQ4AiAgACAYIAaUOAIQIAAgFyAGlDgCACAAIA8gDZQiFSAJlCAQIAuUIhYgB5QgHCAKlCAKIBGMlJKSIA8gFJQiFyAHlJMgECAMlCIYIAmUk5IgBpQ4AjwgACAYIAiUIA8gEpQiHSAHlCAbIAqUIAogE4yUkiAQIA6UIh4gB5STkpIgFSAIlJMgBpQ4AjggACAXIAiUIB4gCZQgGiAKlCAKIBmMlJKSIB0gCZSTIBYgCJSTkiAGlDgCNCAAIBggBJQgFyAFlCARIAKUIAIgHIyUkiAWIAWUk5KSIBUgBJSTIAaUOAIsIAAgFSADlCAeIAWUIBMgApQgAiAbjJSSkiAdIAWUkyAYIAOUk5IgBpQ4AiggACAWIAOUIB0gBJQgGSAClCACIBqMlJIgHiAElJOSkiAXIAOUkyAGlDgCJCAAIA8gB5QiESAElCAKIAuUIgsgBZQgKiAClCACICWUk5IgDyAJlCITIAWUkyAKIAyUIgwgBJSTkiAGlDgCHCAAIAwgA5QgDyAIlCIMIAWUICkgApQgAiAmlJMgCiAOlCIOIAWUk5KSIBEgA5STIAaUOAIYIAAgEyADlCAOIASUICggApQgAiAnlJOSIAwgBJSTIAsgA5STkiAGlDgCFCAAIAogDZQiDSAElCAQIAmUIgkgBZQgJCAClCACIB+UkyAKIBSUIgsgBZSTkpIgECAHlCIHIASUkyAGlDgCDCAAIAcgA5QgCiASlCIHIAWUICMgApQgAiAglJOSIBAgCJQiCCAFlJMgDSADlJOSIAaUOAIIIAAgCyADlCAIIASUICIgApQgAiAhlJMgByAElJOSkiAJIAOUkyAGlDgCBAtPAQJ/QYAIKAIAIgEgAEEHakF4cSICaiEAAkAgAkEAIAAgAU0bRQRAIAA/AEEQdE0NASAAEAANAQtBhAhBMDYCAEF/DwtBgAggADYCACABCwQAIwALBgAgACQACxAAIwAgAGtBcHEiACQAIAALCwgBAEGBCAsBCg==",
+        ),
+      );
+    } catch (e) {
+      Hydra.LOCAL &&
+        console.debug("Error loading matrix.wasm, falling back to javascript implementation", e);
+    }
+  })().then((exports) => {
+    (promise.resolve(),
+      exports &&
+        ((wasmExports = exports),
+        (_this.multiply = function (a, b, c) {
+          return (
+            _this.allocate(a),
+            _this.allocate(b),
+            _this.allocate(c),
+            "number" == typeof a.elements.ptr &&
+              "number" == typeof b.elements.ptr &&
+              "number" == typeof c.elements.ptr &&
+              (wasmExports.multiply_matrices(a.elements.ptr, b.elements.ptr, c.elements.ptr), !0)
+          );
+        }),
+        (_this.getInverse = function (out, m) {
+          return (
+            _this.allocate(out),
+            _this.allocate(m),
+            "number" == typeof out.elements.ptr &&
+              "number" == typeof m.elements.ptr &&
+              (wasmExports.getInverse(out.elements.ptr, m.elements.ptr), !0)
+          );
+        })));
+  });
+  const _identity = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+  ((_this.allocate = function (ref) {
+    if ("number" == typeof ref.elements?.ptr) return !0;
+    if (_oom) return !1;
+    if (!wasmExports) return !1;
+    try {
+      const ptr = wasmExports.allocate_matrix();
+      if (0 === ptr) return ((_oom = !0), !1);
+      const elements = new Float32Array(_memory.buffer, ptr, 16);
+      return (
+        elements.set(ref.elements || _identity, 0),
+        (elements.ptr = ptr),
+        (ref.elements = elements),
+        registry?.register(ref, ref.elements, ref),
+        _matrices.add(new WeakRef(ref)),
+        !0
+      );
+    } catch (e) {
+      return (
+        (_oom = !0),
+        _loggedOutOfMemory ||
+          ((_loggedOutOfMemory = !0), console.error("MatrixWasm allocate error", e)),
+        !1
+      );
+    }
+  }),
+    (_this.ready = function () {
+      return promise;
+    }));
+}, "static");

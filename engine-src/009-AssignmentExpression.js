@@ -1,0 +1,1 @@
+window.onIdle = window.requestIdleCallback;

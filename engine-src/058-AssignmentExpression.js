@@ -1,0 +1,1 @@
+window.THREAD = !1;

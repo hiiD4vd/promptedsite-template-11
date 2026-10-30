@@ -1,0 +1,1 @@
+Skin.tripleBuffered = !1;

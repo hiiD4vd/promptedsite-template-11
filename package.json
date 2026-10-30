@@ -4,16 +4,24 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "predev": "node scripts/build-runtime.mjs",
+    "dev": "vite --host 127.0.0.1 --port 3027",
+    "prebuild": "node scripts/build-runtime.mjs",
     "build": "tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
+    "assets:prepare-preview": "node scripts/prepare-browser-preview.mjs",
+    "build:artifact": "npm run assets:prepare-preview && VITE_MEDIA_BASE_URL=/ VITE_ALLOW_SOFTWARE_WEBGL=1 npm run build",
+    "typecheck": "tsc -b",
+    "lint": "oxlint src",
+    "test": "playwright test",
+    "test:gpu": "playwright test --config playwright.gpu.config.ts",
+    "preview": "vite preview --host 127.0.0.1 --port 4178"
   },
   "dependencies": {
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

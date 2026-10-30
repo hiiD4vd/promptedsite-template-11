@@ -1,0 +1,1 @@
+SkinAnimation.tempRot = new Quaternion();

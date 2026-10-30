@@ -1,0 +1,1 @@
+window.defer = window.requestAnimationFrame;
