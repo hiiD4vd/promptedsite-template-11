@@ -25,7 +25,7 @@ export const ExperienceTitle: React.FC = () => {
           el.style.visibility = 'hidden';
         } else {
           // Read Hydra scroll position directly from Global.SCROLL
-          const scrollY = (window as any).Global?.SCROLL?.y || 0;
+          const scrollY = window.Global?.SCROLL?.y ?? 0;
 
           // Natural scroll up with the 3D scene (1px scroll = 1px translate)
           el.style.transform = `translate3d(0, ${-scrollY}px, 0)`;
