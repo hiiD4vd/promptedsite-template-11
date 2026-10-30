@@ -11,6 +11,12 @@ node_modules
 dist
 dist-ssr
 *.local
+.cache/
+test-results/
+public/assets/**
+!public/assets/js/
+!public/assets/js/**
+public/assets/js/app.1782836328290.js
 
 # Editor directories and files
 .vscode/*

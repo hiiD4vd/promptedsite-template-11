@@ -729,6 +729,43 @@ html:not(.safari) .XText {
   width: 100%;
   height: 100%;
 }
+.Container > .AgeGate {
+  visibility: hidden;
+}
+.AgeGate[data-react-age-gate] {
+  background: #1d1d1d;
+}
+.AgeGate[data-react-age-gate] .heading2 {
+  margin: 0;
+}
+.AgeGate[data-react-age-gate] .top,
+.AgeGate[data-react-age-gate] .bottom {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  align-items: center;
+}
+.AgeGate[data-react-age-gate] .top {
+  top: 40px;
+}
+.AgeGate[data-react-age-gate] .bottom {
+  bottom: 40px;
+}
+.AgeGate[data-react-age-gate] .actions,
+.AgeGate[data-react-age-gate] .action {
+  opacity: 1;
+}
+.AgeGate[data-react-age-gate] .action {
+  transform: translateX(100%);
+  font-family: PPNikkeiMaru-Ultrabold, sans-serif;
+}
+@media (max-width: 767px) {
+  .AgeGate[data-react-age-gate] .action {
+    transform: none;
+  }
+}
 .Story {
   flex-direction: column;
   width: 100vw;
@@ -909,6 +946,20 @@ html:not(.safari) .XText {
 }
 .HeaderMenu .header__link.active span {
   opacity: 1;
+}
+.Story > .HeaderMenu {
+  visibility: hidden;
+}
+.HeaderMenu[data-react-header] .header__link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #111;
+  font: inherit;
+}
+.HeaderMenu[data-react-header] .header__link:focus-visible {
+  outline: 2px solid #7c5cff;
+  outline-offset: -2px;
 }
 @media (max-width: 767px) {
   .HeaderMenu .header__ornament {
@@ -1886,6 +1937,62 @@ html:not(.safari) .XText {
 }
 .LoaderView .lottie-container {
   display: none !important;
+}
+
+.ExperienceError {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 32px;
+  color: #fff;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(124, 92, 255, 0.2), transparent 34%),
+    #08080c;
+}
+
+.ExperienceError > * {
+  margin: 0;
+}
+
+.ExperienceError .body-regular {
+  max-width: 42ch;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.ExperienceError button {
+  min-width: 140px;
+  min-height: 48px;
+  margin-top: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  color: #fff;
+  font: 800 14px/1 PPNikkeiMaru-Ultrabold, sans-serif;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ExperienceError button:hover,
+.ExperienceError button:focus-visible {
+  border-color: #7c5cff;
+  outline: 2px solid transparent;
+  background: rgba(124, 92, 255, 0.25);
+  box-shadow: 0 0 25px rgba(124, 92, 255, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .AgeGate .action,
+  .ExperienceError button,
+  .LoaderView {
+    transition-duration: 0.01ms !important;
+  }
 }
 
 

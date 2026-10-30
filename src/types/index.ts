@@ -1,5 +1,7 @@
 export type NavigationTab = 'experience' | 'collection';
 
+export type ExperienceStatus = 'idle' | 'loading' | 'ready' | 'error';
+
 export interface ProductItem {
   id: string;
   name: string;
