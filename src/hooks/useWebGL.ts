@@ -1,34 +1,64 @@
 import { useEffect, useRef, useState } from 'react';
 import { WebGLApp } from '../engine/WebGLApp';
-import type { NavigationTab } from '../types';
+import type { ExperienceStatus, NavigationTab } from '../types';
 
 export function useWebGL() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
+  const [status, setStatus] = useState<ExperienceStatus>('idle');
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const start = () => {
     if (!containerRef.current) return;
 
     const app = WebGLApp.getInstance();
+    setStatus('loading');
+    setError(null);
 
-    app
+    void app
       .init(containerRef.current, (progress) => {
         setLoadProgress(progress);
         if (progress >= 100) {
           setIsLoaded(true);
+          setStatus('ready');
         }
       })
-      .catch((err) => {
-        // Fallback or error logging
-        console.warn('WebGL initialization:', err);
+      .catch((reason: unknown) => {
+        const message = reason instanceof Error ? reason.message : 'The experience could not start.';
+        setStatus('error');
+        setError(message);
       });
+  };
+
+  useEffect(() => {
+    start();
 
     return () => {
       // Teardown on unmount
-      app.destroy();
+      WebGLApp.getInstance().destroy();
     };
   }, []);
+
+  const retry = () => {
+    if (!containerRef.current) return;
+
+    setStatus('loading');
+    setError(null);
+    setLoadProgress(0);
+    void WebGLApp.getInstance()
+      .retry(containerRef.current, (progress) => {
+        setLoadProgress(progress);
+        if (progress >= 100) {
+          setIsLoaded(true);
+          setStatus('ready');
+        }
+      })
+      .catch((reason: unknown) => {
+        setStatus('error');
+        setError(reason instanceof Error ? reason.message : 'The experience could not start.');
+      });
+  };
 
   const changeTab = (tab: NavigationTab) => {
     WebGLApp.getInstance().setTab(tab);
@@ -42,6 +72,9 @@ export function useWebGL() {
     containerRef,
     isLoaded,
     loadProgress,
+    status,
+    error,
+    retry,
     changeTab,
     selectProduct,
   };
